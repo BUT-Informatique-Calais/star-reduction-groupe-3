@@ -55,6 +55,7 @@ if data.ndim == 3:
         # uint8: unsigned 8-bit integer (0 to 255) represents pixel intensity
         channel = data[:, :, i]
         image[:, :, i] = ((channel - channel.min()) / (channel.max() - channel.min()) * 255).astype('uint8')
+    image = cv.cvtColor(image, cv.COLOR_RGB2BGR)
 else:
     # Monochrome image (only height and width)
     # cmap='gray': tells Matplotlib to use a grayscale colormap to represent pixel intensity
