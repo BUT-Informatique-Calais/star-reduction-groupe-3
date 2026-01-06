@@ -28,6 +28,12 @@ def convert_to_uint8 (data):
 
     return image
 
+def combine_results(original_image, eroded_image):
+    # Concatenates the original and eroded images side by side
+    # Both images have the same dimensions and data type
+    combined = np.hstack((original_image, eroded_image))
+    return combined
+
 if __name__ == "__main__":
     # Opens and reads a FITS file from the command line
     fits_file = sys.argv[1]
@@ -42,6 +48,9 @@ if __name__ == "__main__":
 
     img_eroded = cv.erode(image, kernel, iterations=int(sys.argv[4]) if len(sys.argv) > 4 else 1)
     print(f"Eroded image shape: {img_eroded.shape}\n{img_eroded}")
+
+    img_combined = combine_results(image, img_eroded)
+    cv.imwrite('./results/combined.png', img_combined)
 
     cv.imwrite('./results/eroded.png', img_eroded)
 
