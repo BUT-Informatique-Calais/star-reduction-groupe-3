@@ -3,3 +3,4 @@ venv
 *.pdf
 *.md
 __pycache__
+results

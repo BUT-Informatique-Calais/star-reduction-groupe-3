@@ -4,9 +4,10 @@ from photutils.detection import DAOStarFinder
 import matplotlib.pyplot as plt
 import cv2 as cv
 import numpy as np
-import os
-from typing import Tuple, Optional
 from numpy.typing import NDArray
+import os
+from tabulate import tabulate
+from typing import Tuple, Optional
 
 
 # TODO: Add Optional types
@@ -23,6 +24,17 @@ def does_file_exist(filepath: str) -> bool:
         bool: True if the file exists
     '''
     return os.path.isfile(filepath)
+
+def does_dir_exist(dirpath: str) -> bool:
+    '''Checks whether a directory exists
+
+    Args:
+        dirpath (str): The path to the directory
+
+    Returns:
+        bool: True if the directory exists
+    '''
+    return os.path.isdir(dirpath)
 
 def is_file_fits_format(filepath: str) -> bool:
     '''Checks if a file is in FITS format
@@ -79,6 +91,31 @@ def get_hdu_header(hdul: fits.HDUList, index: int=0) -> fits.Header:
     '''
     return hdul[index].header
 
+def create_fits_header_table(hdul: fits.HDUList, index: int=0):
+    '''Creates a table that contains FITS header info
+
+    Args:
+        hdul (fits.HDUList): Opened HDU list
+        index (int, optional): Index of the HDU. Defaults to 0.
+
+    Returns:
+        str: A string containing the table
+    '''
+    header = get_hdu_header(hdul, index)
+    table = [[key, value] for key, value in header.items()]
+    return tabulate(table, headers=["Key", "Value"], tablefmt="grid")
+
+def has_color_channels(data: NDArray[np.floating]) -> bool:
+    '''Checks if the FITS file has color channels
+
+    Args:
+        data (ndarray): The FITS image
+
+    Returns:
+        bool: True if the FITS file has color channels
+    '''
+    return data.ndim == 3
+
 # =========================
 # IMAGE NORMALIZATION/SAVING
 # =========================
@@ -116,11 +153,28 @@ def save_float_image(data: NDArray[np.floating], filepath: str) -> None:
     '''Save a floating-point image as an 8-bit PNG using OpenCV
 
     Args:
-        data (ndarray): The image to save
+        data (ndarray): The image to save (H, W) or (H, W, C) or (C, H, W)
         filepath (str): The path to save the image
     '''
-    img_n = normalize_minmax(data)
-    cv.imwrite(filepath, (img_n * 255).astype("uint8"))
+    # Ensure (H, W, C) format for color images
+    if data.ndim == 3:
+        if data.shape[0] == 3:
+            # Convert (C, H, W) -> (H, W, C)
+            data = np.transpose(data, (1, 2, 0))
+        
+        # Debug: Check channel differences
+        print(f"[DEBUG] Channel stats: R={data[...,0].mean():.2f}, G={data[...,1].mean():.2f}, B={data[...,2].mean():.2f}")
+        
+        # Normalize each channel separately
+        img = np.zeros_like(data, dtype=np.uint8)
+        for c in range(3):
+            img[..., c] = (normalize_minmax(data[..., c]) * 255).astype(np.uint8)
+        # Convert RGB to BGR for OpenCV
+        img = cv.cvtColor(img, cv.COLOR_RGB2BGR)
+        cv.imwrite(filepath, img)
+    else:
+        # Monochrome
+        cv.imwrite(filepath, (normalize_minmax(data) * 255).astype(np.uint8))
 
 def save_combined_images(image1: NDArray[np.uint8], image2: NDArray[np.uint8], filepath: str) -> NDArray[np.uint8]:
     '''Save two images side by side for comparison
@@ -205,6 +259,43 @@ def erode_mask(mask: NDArray[np.uint8], kernel: NDArray[np.uint8], iterations: i
         ndarray: The eroded mask
     '''
     return cv.erode(mask, kernel, iterations=iterations)
+
+def dilate_mask(mask: NDArray[np.uint8], kernel: NDArray[np.uint8], iterations: int=1) -> NDArray[np.uint8]:
+    '''Dilates a mask
+
+    Args:
+        mask (ndarray): The binary mask to dilate
+        kernel (ndarray): The kernel to use for dilation
+        iterations (int, optional): The number of times to dilate the binary mask. Defaults to 1.
+
+    Returns:
+        ndarray: The dilated mask
+    '''
+    return cv.dilate(mask, kernel, iterations=iterations)
+
+def convert2luma(image: NDArray[np.floating]) -> NDArray[np.floating]:
+    '''Converts an image to luma
+
+    Args:
+        image (ndarray): The image to convert
+
+    Returns:
+        ndarray: The converted image
+    '''
+    if image.ndim == 2:
+        return image.astype(np.float32)
+    elif image.ndim == 3:
+        # C x H x W
+        if image.shape[0] == 3:
+            return np.mean(image, axis=0).astype(np.float32)
+        # H x W x C
+        elif image.shape[2] == 3:
+            return np.mean(image, axis=2).astype(np.float32)
+        else:
+            # fallback: mean over last axis
+            return np.mean(image, axis=-1).astype(np.float32)
+    else:
+        raise ValueError(f"Unsupported image shape {image.shape}")
 
 def filter_noise(image: NDArray[np.floating], sigma: float=3.0) -> Tuple[float, float, float]:
     '''Filters noise using sigma clipping
@@ -297,3 +388,15 @@ def get_starless_image(image: NDArray[np.floating], kernel_radius: int=4):
     '''
     kernel = create_circular_kernel(kernel_radius)
     return cv.morphologyEx(image, cv.MORPH_OPEN, kernel)
+
+# =========================
+# TESTING PLAYGROUND YAY!
+# =========================
+if __name__ == "__main__":
+    filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.path.pardir, "examples/test_M31_linear.fits")
+    hdul = get_hdu_list(filepath)
+    fits_data = get_hdu_data(hdul)
+    hdul.close()
+
+    fits_header = create_fits_header_table(hdul, 0)
+    print(fits_header)

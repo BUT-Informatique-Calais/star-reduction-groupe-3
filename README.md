@@ -24,7 +24,9 @@ A simple but useful tool to achieve star reduction on .FITS files, using the Ast
 * Matplotlib **3.10.8** - [API Reference](https://matplotlib.org/stable/api/index.html)
 * NumPy **2.20** - [Docs](https://numpy.org/doc/)
 * OpenCV for Python **4.12.0.88** - [Modules](https://docs.opencv.org/4.x/index.html)
+* Photutils **2.3.0** - [User Guide](https://photutils.readthedocs.io/en/stable/user_guide/index.html)
 * Qt for Python **6.9.1** - [Docs](https://doc.qt.io/qtforpython-6.9/)
+* Tabulate **0.9.0** - [Full Guide](https://www.datacamp.com/tutorial/python-tabulate)
 
 ### Virtual Environment
 
