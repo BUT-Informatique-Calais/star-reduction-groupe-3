@@ -1,5 +1,7 @@
 # 🌠 StarEX (beta)
 
+![Python](https://img.shields.io/badge/Python-3.8+-green)
+
 A simple but useful tool to achieve star reduction on .FITS files, using the Astropy.io and OpenCV libraries.
 
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/zP0O23M7)
@@ -22,6 +24,7 @@ A simple but useful tool to achieve star reduction on .FITS files, using the Ast
 * Matplotlib **3.10.8** - [API Reference](https://matplotlib.org/stable/api/index.html)
 * NumPy **2.20** - [Docs](https://numpy.org/doc/)
 * OpenCV for Python **4.12.0.88** - [Modules](https://docs.opencv.org/4.x/index.html)
+* Qt for Python **6.9.1** - [Docs](https://doc.qt.io/qtforpython-6.9/)
 
 ### Virtual Environment
 
