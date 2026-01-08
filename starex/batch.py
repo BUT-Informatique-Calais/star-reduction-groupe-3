@@ -40,7 +40,7 @@ if __name__ == "__main__":
     # =========================
     # MANDATORY ARGS
     # =========================
-    parser.add_argument("path", help="File or directory of FITS images")
+    parser.add_argument("paths", nargs='+', metavar="PATH", help="File(s) or directory(ies) of FITS images")
 
     # =========================
     # OPTIONAL ARGS
@@ -63,8 +63,12 @@ if __name__ == "__main__":
 
     # Parse arguments
     args = parser.parse_args()
-    # Get files
-    files = collect_files(args.path)
+    
+    # Get files from all provided paths
+    files = []
+    for path in args.paths:
+        files.extend(collect_files(path))
+    
     # Create output directory
     if args.comparison is not None:
         comparison_dir = os.path.join(args.outdir, "comparison")

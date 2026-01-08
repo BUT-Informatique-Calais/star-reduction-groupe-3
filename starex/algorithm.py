@@ -47,6 +47,7 @@ class StarEX:
         self.mask_blur_sigma = mask_blur_sigma
         self.reduction_strength = reduction_strength
         self.kernel_radius = kernel_radius
+        self.iterations = iterations
 
     def get_luminance(
         self, 
