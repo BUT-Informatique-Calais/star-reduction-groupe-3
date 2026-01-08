@@ -176,7 +176,7 @@ def save_float_image(data: NDArray[np.floating], filepath: str) -> None:
         # Monochrome
         cv.imwrite(filepath, (normalize_minmax(data) * 255).astype(np.uint8))
 
-def save_combined_images(image1: NDArray[np.uint8], image2: NDArray[np.uint8], filepath: str) -> NDArray[np.uint8]:
+def save_combined_data(image1: NDArray[np.uint8], image2: NDArray[np.uint8], filepath: str) -> NDArray[np.uint8]:
     '''Save two images side by side for comparison
 
     Args:
@@ -186,6 +186,22 @@ def save_combined_images(image1: NDArray[np.uint8], image2: NDArray[np.uint8], f
     Returns:
         ndarray: The combined image
     '''
+    combined = np.hstack((image1, image2))
+    cv.imwrite(filepath, combined)
+    return combined
+
+def save_combined_images(image1_path: str, image2_path: str, filepath: str) -> NDArray[np.uint8]:
+    '''Save two images side by side for comparison
+
+    Args:
+        image1_path (str): The path to the first image to save
+        image2_path (str): The path to the second image to save
+
+    Returns:
+        ndarray: The combined image
+    '''
+    image1 = cv.imread(image1_path)
+    image2 = cv.imread(image2_path)
     combined = np.hstack((image1, image2))
     cv.imwrite(filepath, combined)
     return combined
@@ -376,7 +392,7 @@ def apply_gaussian_blur(mask: NDArray[np.uint8], sigma: float=2.0):
     mask_f = mask.astype(np.float32) / 255.0
     return cv.GaussianBlur(mask_f, ksize=(0, 0), sigmaX=sigma)
 
-def get_starless_image(image: NDArray[np.floating], kernel_radius: int=4):
+def get_starless_image(image: NDArray[np.floating], kernel_radius: int=4, iterations: int=1):
     '''Gets a starless image by using morphological opening. Morphological opening is a combination of erosion and dilation
 
     Args:
@@ -387,7 +403,7 @@ def get_starless_image(image: NDArray[np.floating], kernel_radius: int=4):
         ndarray: The eroded image
     '''
     kernel = create_circular_kernel(kernel_radius)
-    return cv.morphologyEx(image, cv.MORPH_OPEN, kernel)
+    return cv.morphologyEx(image, cv.MORPH_OPEN, kernel, iterations)
 
 # =========================
 # TESTING PLAYGROUND YAY!

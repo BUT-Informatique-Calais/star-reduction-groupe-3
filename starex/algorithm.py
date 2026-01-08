@@ -23,7 +23,8 @@ class StarEX:
         r_max=8, 
         mask_blur_sigma=2.5, # Between 1.5 and 3.0
         reduction_strength=0.7, # Between 0.5 and 0.7 (1.0 is maximum reduction)
-        kernel_radius=4 # Between 4 and 6
+        kernel_radius=4, # Between 4 and 6
+        iterations=1
     ) -> None:
         '''Initializes StarEX algorithm with default values
 
@@ -37,6 +38,7 @@ class StarEX:
             mask_blur_sigma (float, optional): Avoids noise in the mask
             reduction_strength (float, optional): Reduction strength
             kernel_radius (int, optional): Kernel radius
+            iterations (int, optional): Number of iterations
         '''
         self.fwhm = fwhm
         self.threshold_sigma = threshold_sigma
@@ -45,6 +47,7 @@ class StarEX:
         self.mask_blur_sigma = mask_blur_sigma
         self.reduction_strength = reduction_strength
         self.kernel_radius = kernel_radius
+        self.iterations = iterations
 
     def run(
         self: Self, 
@@ -66,7 +69,7 @@ class StarEX:
             "gaussian_mask",
             "eroded",
             "reduced",
-            "sources",
+            "sources"
         ):
             raise ValueError("Type must be 'original', 'binary_mask', 'gaussian_mask', 'eroded', 'reduced' or 'sources'")
 
@@ -131,8 +134,9 @@ class StarEX:
         # It is better to use morphological opening than simple erosion. It avoids the problem of "holes" in the mask
         if not has_color:
             eroded = utils.get_starless_image(
-                luma,
-                kernel_radius=self.kernel_radius
+                luma, 
+                kernel_radius=self.kernel_radius, 
+                iterations=self.iterations
             )
 
             # =========================

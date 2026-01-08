@@ -45,6 +45,7 @@ if __name__ == "__main__":
     # =========================
     # OPTIONAL ARGS
     # =========================
+    # TODO: Generates every output types
     parser.add_argument(
         "-t", "--type",
         choices=["original", "binary_mask", "gaussian_mask", "eroded", "reduced", "sources"],
@@ -55,6 +56,9 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--threshold_sigma", type=float, default=2.5, help="Detection threshold")
     parser.add_argument("-r", "--reduction_strength", type=float, default=0.7, help="Reduction strength")
     parser.add_argument("-k", "--kernel_radius", type=int, default=4, help="Kernel radius")
+    parser.add_argument("-i", "--iterations", type=int, default=1, help="Number of iterations")
+    parser.add_argument("-c", "--comparison", type=str, nargs=2, metavar=("FILE1", "FILE2"), help="Compare two images")
+    # TODO: Put a list of files
     parser.add_argument("-o", "--outdir", type=str, default="results", help="Directory to save results")
 
     # Parse arguments
@@ -62,7 +66,14 @@ if __name__ == "__main__":
     # Get files
     files = collect_files(args.path)
     # Create output directory
-    os.makedirs(args.outdir, exist_ok=True)
+    if args.comparison is not None:
+        comparison_dir = os.path.join(args.outdir, "comparison")
+        os.makedirs(comparison_dir, exist_ok=True)
+        # Gets the number of files to add to the filename
+        # TODO: Comparison with every file
+        nb_files = len([f for f in os.listdir(comparison_dir) if f.startswith("comparison_") and f.endswith(".png")])
+        combined = utils.save_combined_images(args.comparison[0], args.comparison[1], os.path.join(comparison_dir, f"comparison_{nb_files+1}.png"))
+        print(f"[INFO] Comparison image saved at {os.path.join(comparison_dir, f'comparison_{nb_files+1}.png')}")
 
     # Initialize algorithm
     algorithm = StarEX(
