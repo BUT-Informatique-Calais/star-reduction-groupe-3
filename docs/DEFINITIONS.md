@@ -1,5 +1,8 @@
-### Astrometry
+### Astrometry:
 A branch of astronomy that determines the position of celestial bodies on the celestial sphere by measuring angles.
+
+### Open Source Computer Vision Library (openCV):
+An open source computer vision and machine learning software library.
 
 ### Atmospheric diffusion or turbulence (known as seeing):
 The effect of light scattering produced by the brightest stars.
