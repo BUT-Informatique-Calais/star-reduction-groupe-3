@@ -230,7 +230,8 @@ def compare(file1, file2, outdir, open):
 @batch.command()
 @click.argument("filename", required=True, type=click.Path(exists=True, dir_okay=False, file_okay=True))
 def view(filename):
-    print(utils.create_fits_header_table(utils.get_hdu_list(filename), 0))
+    '''View FITS header information in a formatted table'''
+    click.echo(utils.create_fits_header_table(utils.get_hdu_list(filename), 0))
 
 if __name__ == '__main__':
     batch()

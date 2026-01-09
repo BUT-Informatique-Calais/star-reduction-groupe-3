@@ -26,6 +26,8 @@ A simple but useful tool to achieve star reduction on .FITS files, using the Ast
 * OpenCV for Python **4.12.0.88** - [Modules](https://docs.opencv.org/4.x/index.html)
 * Photutils **2.3.0** - [User Guide](https://photutils.readthedocs.io/en/stable/user_guide/index.html)
 * Tabulate **0.9.0** - [Full Guide](https://www.datacamp.com/tutorial/python-tabulate)
+* Click **8.3.1** [Docs](https://click.palletsprojects.com/en/stable/#documentation)
+* tqdm **0.9.0** [GitHub](https://tqdm.github.io/)
 
 ### Virtual Environment
 
