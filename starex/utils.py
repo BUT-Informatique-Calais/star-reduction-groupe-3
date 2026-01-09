@@ -8,9 +8,11 @@ from numpy.typing import NDArray
 import os
 from tabulate import tabulate
 from typing import Tuple, Optional
+# TODO: Sorts out imports
 
 
 # TODO: Add Optional types
+# TODO: There is a lot of unused functions or incompatible functions. Needs to be sorted out!!
 # =========================
 # FILESYSTEM UTILITIES
 # =========================
@@ -161,10 +163,7 @@ def save_float_image(data: NDArray[np.floating], filepath: str) -> None:
         if data.shape[0] == 3:
             # Convert (C, H, W) -> (H, W, C)
             data = np.transpose(data, (1, 2, 0))
-        
-        # Debug: Check channel differences
-        print(f"[DEBUG] Channel stats: R={data[...,0].mean():.2f}, G={data[...,1].mean():.2f}, B={data[...,2].mean():.2f}")
-        
+
         # Normalize each channel separately
         img = np.zeros_like(data, dtype=np.uint8)
         for c in range(3):

@@ -1,9 +1,9 @@
 import sys, os
-import cv2 as cv
 import utils as utils
 from algorithm import StarEX
 
 # TODO: Add docstrings and explicit types
+# TODO: To delete! because it is not used anymore :'(
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("[HOW] Correct syntax is: python main.py <image.fits>")
