@@ -1,16 +1,59 @@
-# 🌠 StarEX (beta)
+# 🌠 StarEX (0.0.1)
 
 ![Python](https://img.shields.io/badge/Python-3.8+-green)
 
 A simple but useful tool to achieve star reduction on .FITS files, using the Astropy.io and OpenCV libraries.
 
+To get started, refer to the following documentation: [Terminal Commands](docs/COMMANDS.md)
+
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/zP0O23M7)
+
+## Screenshots
+
+<img src="examples/images/test_M31_linear_original.png" alt="M31 Linear Original" width="300" height="300">
+<img src="examples/images/test_M31_linear_eroded.png" alt="M31 Linear Eroded" width="300" height="300">
+<img src="examples/images/test_M31_linear_binary_mask.png" alt="M31 Raw Mask" width="300" height="300">
 
 ## Authors
 
 - COLIN Noé [@Kiizer](https://www.github.com/Kiizer861)
 - MELOCCO David [@ThFoxY](https://www.github.com/ThFoxY)
 - LECLERCQ-SPETER Simon [@Koshy](https://www.github.com/KoshyMVP)
+
+## What's StarEX?
+
+StarEX is an algorithm created in one week to process .FITS images with precision and scientific accuracy.
+
+Here are the challenges we selected and the reasons why some were not chosen:
+
+* ❌ **Astrometry via API:** Use the Astrometry.net API to send your image and get an accurate star mask.
+
+    * Integrating an API (with a backend server, a frontend client, and requiring access to an API key) in just one week was not possible. Moreover, the API was developed in 2009, and access to simple, easy-to-use documentation is nowhere to be found. Here's the source code for the [Client side](https://github.com/dstndstn/astrometry.net/blob/main/net/client/client.py) alone.
+    * For many teams, this was a waste of time and the expected result was not profitable.
+
+* ✅ **Multi-size reduction:** Large stars require greater erosion than small ones.
+
+    * The algorithm contains a method to process multi-size reduction. The way it works is with the magnitude of a star. The higher the magnitude, the bigger the circular kernel is when processing. Simple right?
+
+* ❌ **User Interface:** Develop an interface that allows users to load a FITS file and adjust the reduction strength in real time.
+
+    * Almost every group went with an GUI. However, our goal was to have an optimized and accurate tool. No need to have an user interface to do so!
+    * Moreover, AI can generate a whole Qt application nowadays. For us, it was a waste of time.
+
+* 🕒 **Machine Learning Detection:** Train a small neural network to separate stars from the background.
+
+    * No possible in a week, as it would take a lot of data and hours to be able to do anything.
+    * However, it might be interesting experimenting after the assessment due date!
+
+* ✅ **Before/After Comparator:** Create a visualization tool that allows you to quickly overlay the original image and the processed image.
+
+    * With the `compare`command, you can generate two images side-by-side in a single .png file.
+    * With the `-b` or `--blink` option, you can generate a gif with a specified delay that switches between the original image and the processed one!
+
+* ✅ **Batch Processing:** Develop a “command line” mode that allows multiple FITS images to be processed automatically.
+
+    * This is what makes StarEX lighweighted and easy-to-use! You can pass a single file, a list of file or even a directory that contains .FITS file and then apply specific process options.
+    * The CLI comes with a progress bar and colors thanks to the **tqdm** and **Click** libraries.
 
 ## Installation
 

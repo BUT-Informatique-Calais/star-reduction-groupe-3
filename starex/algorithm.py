@@ -187,7 +187,6 @@ class StarEX:
         eroded_channels = []
 
         for c in range(colored.shape[0]):
-            print(colored.shape[0])
             channel = colored[c]
             
             eroded_c = self.create_eroded_image(channel)
@@ -201,10 +200,8 @@ class StarEX:
 
         # Puts channels back
         reduced = np.stack(reduced_channels, axis=0)
-        print(f"Reduced: {reduced.shape}")
         
         eroded = np.stack(eroded_channels, axis=0)
-        print(f"Eroded: {eroded.shape}")
         
         return reduced, eroded
 
@@ -320,7 +317,6 @@ class StarEX:
         eroded_channels = []
 
         for c in range(colored.shape[0]):
-            print(colored.shape[0])
             channel = colored[c]
 
             Ierode_c = utils.get_starless_image(
@@ -335,13 +331,11 @@ class StarEX:
 
         # Puts channels back
         reduced = np.stack(reduced_channels, axis=0)
-        print(f"Reduced: {reduced.shape}")
 
         if output_type == "reduced":
             return {"reduced": reduced}
 
         eroded = np.stack(eroded_channels, axis=0)
-        print(f"Eroded: {eroded.shape}")
 
         if output_type == "eroded":
             return {"eroded": eroded}
