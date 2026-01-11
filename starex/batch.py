@@ -1,4 +1,4 @@
-import os, sys
+import os, sys, gc # Garbage collector to free memory when processing multiple files
 from datetime import datetime
 import platform, subprocess # For compatibility: gets operating system (https://docs.python.org/fr/3.9/library/platform.html) and runs a command to open a file or directory
 from pathlib import Path # For compatibility: it avoids struggle between Windows and UNIX paths (https://docs.python.org/3/library/pathlib.html)
@@ -120,7 +120,7 @@ def batch():
 
 # Format: output image format
 @click.option("--format", "format_type", 
-                type=click.Choice(["png8", "png16"]), # Removed "tiff" because it wont work :c
+                type=click.Choice(["png8", "png16"]), # TIFF won't work :c
                 default="png16", 
                 help="Output format: png8 (8-bit PNG), png16 (16-bit PNG), tiff32 (32-bit TIFF). Defaults to png16")
 
@@ -166,6 +166,11 @@ def batch():
                 default=1, 
                 help="Number of morphological iterations: how many times morphological operations are applied. Defaults to 1")
 
+# Multiscale: adaptive kernel sizes
+@click.option("--multiscale/--no-multiscale",
+                default=False,
+                help="Use adaptive kernel sizes based on star magnitude. Defaults to False")
+
 # Date: add date to output filename to avoid overwriting
 @click.option("--date/--no-date", 
                 default=True, 
@@ -177,7 +182,7 @@ def batch():
               help="Open the resulting image (or directory if multiple files) after processing. Defaults to True")
 
 # Main function: processes FITS files
-def process(paths, output_type, outdir, format_type, no_normalize, starless_method, full_width_half_max, threshold_sigma, reduction_strength, kernel_radius, iterations, date, open):
+def process(paths, output_type, outdir, format_type, no_normalize, starless_method, full_width_half_max, threshold_sigma, reduction_strength, kernel_radius, iterations, multiscale, date, open):
     '''Processes FITS images using StarEX algorithm'''
 
     # Collects all FITS files from given paths (files or directories)
@@ -208,7 +213,8 @@ def process(paths, output_type, outdir, format_type, no_normalize, starless_meth
         reduction_strength=reduction_strength, 
         kernel_radius=kernel_radius, 
         iterations=iterations, 
-        starless_method=starless_method
+        starless_method=starless_method, 
+        multiscale=multiscale
     )
 
     # Defines the types to be processed
@@ -242,13 +248,18 @@ def process(paths, output_type, outdir, format_type, no_normalize, starless_meth
                 filename = Path(filepath).stem # Gets the name of the file without the extension
                 pbar.set_postfix(file=filename[:20]) # Sets the progress bar postfix as the filename (maximum of 20 characters)
 
-                # Loads FITS files
-                hdul = utils.get_hdu_list(filepath)
-                fits_data = utils.get_hdu_data(hdul)
-                hdul.close()
+                # Loads FITS files with explicit context manager to avoid memory leaks
+                with utils.get_hdu_list(filepath) as hdul:
+                    fits_data = utils.get_hdu_data(hdul)
 
                 # Runs StarEX algorithm
-                result = algorithm.run(fits_data, output_type=current_type)
+                try:
+                    result = algorithm.run(fits_data, output_type=current_type)
+                except Exception as e:
+                    click.secho(
+                        f"\n[ERR] Error processing {filename}: {e}", fg="red", bold=True
+                    )
+                    continue
 
                 # Handles sources output, which are detected stars
                 if current_type == "sources":
@@ -287,6 +298,13 @@ def process(paths, output_type, outdir, format_type, no_normalize, starless_meth
                         "------------------------------------------------------------------------------------------------------------------", fg="blue", bold=True
                     )
                     processed_files.append(save_path) # Adds processed file to list
+
+                # Frees memory
+                del fits_data
+                del result
+                gc.collect()
+                
+                pbar.set_postfix(file=filename[:20], mem="Cleaned")
 
     # Open results if requested
     if open and output_type != "sources":
@@ -329,36 +347,65 @@ def process(paths, output_type, outdir, format_type, no_normalize, starless_meth
                 default="results/comparison", 
                 help="Directory to save comparison into")
 
+# Blink: generate animated GIF alternating between images
+@click.option("-b", "--blink", "blink",
+                is_flag=True,
+                default=False,
+                help="Generate animated GIF alternating between images. Defaults to False")
+
+# Blink duration: duration per frame in milliseconds
+@click.option("--blink-duration", "blink_duration",
+                type=int,
+                default=500,
+                help="Duration per frame in milliseconds for blink mode. Defaults to 500ms")
+
 # Date: add date to output filename to avoid overwriting
 @click.option("--date", "date", 
                 default=True, 
                 help="Add date to output filename. Defaults to True")
 
 # Open: open the resulting image (or directory if multiple files) or not
-@click.option("--open/--no-open",
-              default=True,
+@click.option("--open/--no-open", 
+              default=True, 
               help="Open the resulting image after comparison. Defaults to True")
 
-def compare(file1, file2, outdir, date, open):
+def compare(file1, file2, outdir, blink, blink_duration, date, open):
     '''Compares two FITS images side-by-side'''
 
     # Creates output directory
     output_dir = Path(outdir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Counts existing comparison (has .png extension)
-    nb_files = len(list(output_dir.glob("*.png"))) + len(list(output_dir.glob("*.tiff")))
-    if date:
-        output_path = output_dir / f"comparison_{nb_files + 1}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
+    # Counts existing comparison
+    nb_png = len(list(output_dir.glob("*.png")))
+    nb_gif = len(list(output_dir.glob("*.gif")))
+    nb_files = nb_png + nb_gif
+
+    if blink:
+        # Generates animated GIF
+        if date:
+            output_path = output_dir / f"comparison_{nb_files + 1}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.gif"
+        else:
+            output_path = output_dir / f"comparison_{nb_files + 1}.gif"
+
+        # Creates animated GIF comparison
+        utils.save_gif(file1, file2, str(output_path), duration=blink_duration)
+        click.secho(
+            f"[OK] Animated GIF comparison saved to: {output_path.absolute()}", fg="green", bold=True
+        )
     else:
-        output_path = output_dir / f"comparison_{nb_files + 1}.png"
+        # Generates static image side-by-side
+        if date:
+            output_path = output_dir / f"comparison_{nb_files + 1}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
+        else:
+            output_path = output_dir / f"comparison_{nb_files + 1}.png"
 
-    # Creates comparison (images are side-by-side)
-    utils.save_combined_images(file1, file2, str(output_path))
+        # Creates comparison (images are side-by-side)
+        utils.save_combined_images(file1, file2, str(output_path))
 
-    click.secho(
-        f"[OK] Comparison saved to: {output_path.absolute()}", fg="green", bold=True
-    )
+        click.secho(
+            f"[OK] Comparison saved to: {output_path.absolute()}", fg="green", bold=True
+        )
 
     # Opens result if requested
     if open:

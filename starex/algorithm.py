@@ -1,5 +1,6 @@
 # Third-party imports
 import numpy as np
+import cv2 as cv
 from numpy.typing import NDArray
 
 # Typing
@@ -32,7 +33,8 @@ class StarEX:
         reduction_strength=0.65, # Between 0.5 and 0.7 (1.0 is maximum reduction)
         kernel_radius=5, # Between 4 and 6
         iterations=1, 
-        starless_method: Literal["opening", "inpainting"] = "opening"
+        starless_method: Literal["opening", "inpainting"] = "opening", 
+        multiscale: bool = False
     ) -> None:
         '''Initializes StarEX algorithm with default values
 
@@ -46,6 +48,7 @@ class StarEX:
             kernel_radius (int): Morphological kernel radius (4-6)
             iterations (int): Number of morphological iterations
             starless_method (str): Method for starless image ("opening" or "inpainting")
+            multiscale (bool): Use multiscale eroded image
         '''
         self.fwhm = fwhm
         self.threshold_sigma = threshold_sigma
@@ -56,6 +59,7 @@ class StarEX:
         self.kernel_radius = kernel_radius
         self.iterations = iterations
         self.starless_method = starless_method
+        self.multiscale = multiscale
 
     # =========================
     # CORE STEPS
@@ -122,14 +126,83 @@ class StarEX:
         )
         return eroded
 
+    def create_multiscale_eroded_image(
+        self: Self, 
+        image: NDArray[np.floating], 
+        sources: List, 
+        binary_mask: Optional[NDArray[np.uint8]] = None
+    ) -> NDArray[np.floating]:
+        '''Creates starless (eroded) version of image using adaptative kernel sizes per star magnitude'''
+        if sources is None or len(sources) == 0:
+            return image.copy()
+
+        flux = sources["flux"]
+        f_min, f_max = flux.min(), flux.max()
+
+        # 3 categories: small, medium, large
+        flux_range = f_max - f_min
+        threshold_small = f_min + 0.33 * flux_range
+        threshold_large = f_min + 0.66 * flux_range
+
+        # 3 individual masks
+        small_mask = np.zeros_like(binary_mask, dtype=np.uint8)
+        medium_mask = np.zeros_like(binary_mask, dtype=np.uint8)
+        large_mask = np.zeros_like(binary_mask, dtype=np.uint8)
+
+        for src in sources:
+            x = int(round(src["xcentroid"]))
+            y = int(round(src["ycentroid"]))
+
+            f = src["flux"]
+
+            f_norm = (f - f_min) / (flux_range + 1e-8)
+
+            radius = int(self.r_min + (self.r_max - self.r_min) * np.sqrt(f_norm))
+
+            # Gets the star category
+            if f < threshold_small:
+                cv.circle(small_mask, (x, y), radius, 255, -1)
+            elif f < threshold_large:
+                cv.circle(medium_mask, (x, y), radius, 255, -1)
+            else:
+                cv.circle(large_mask, (x, y), radius, 255, -1)
+
+        # Processes each category separetely
+        if self.starless_method == "inpainting":
+            eroded_small = utils.get_starless_image(image, small_mask, method="inpainting")
+            eroded_medium = utils.get_starless_image(image, medium_mask, method="inpainting")
+            eroded_large = utils.get_starless_image(image, large_mask, method="inpainting")
+        else:
+            eroded_small = utils.get_starless_image(image, small_mask, method="opening")
+            eroded_medium = utils.get_starless_image(image, medium_mask, method="opening")
+            eroded_large = utils.get_starless_image(image, large_mask, method="opening")
+
+        result = image.copy() # Combines all categories
+
+        # Normalizes each mask
+        small_mask_norm = small_mask.astype(np.float32) / 255.0
+        medium_mask_norm = medium_mask.astype(np.float32) / 255.0
+        large_mask_norm = large_mask.astype(np.float32) / 255.0
+
+        # Applies erosion
+        result = result * (1.0 - large_mask_norm) + eroded_large * large_mask_norm
+        result = result * (1.0 - medium_mask_norm) + eroded_medium * medium_mask_norm
+        result = result * (1.0 - small_mask_norm) + eroded_small * small_mask_norm
+
+        return result
+
     def reduce_stars_single_channel(
         self: Self, 
         channel: NDArray[np.floating], 
         gaussian_mask: NDArray[np.floating], 
-        binary_mask: Optional[NDArray[np.uint8]] = None
+        binary_mask: Optional[NDArray[np.uint8]] = None, 
+        sources: Optional[List] = None
     ) -> NDArray[np.floating]:
         '''Reduces stars in a single channel'''
-        eroded = self.create_eroded_image(channel, binary_mask)
+        if self.multiscale and sources is not None:
+            eroded = self.create_multiscale_eroded_image(channel, sources, binary_mask)
+        else:
+            eroded = self.create_eroded_image(channel, binary_mask)
 
         reduced = (
             (self.reduction_strength * gaussian_mask) * eroded
@@ -141,7 +214,8 @@ class StarEX:
         self: Self, 
         colored: NDArray[np.floating], 
         gaussian_mask: NDArray[np.floating], 
-        binary_mask: Optional[NDArray[np.uint8]] = None
+        binary_mask: Optional[NDArray[np.uint8]] = None, 
+        sources: Optional[List] = None
     ) -> Tuple[NDArray[np.floating], NDArray[np.floating]]:
         '''Reduces stars in multi-channel (color) image'''
         reduced_channels = []
@@ -150,7 +224,11 @@ class StarEX:
         for c in range(colored.shape[0]):
             channel = colored[c]
 
-            eroded_c = self.create_eroded_image(channel, binary_mask)
+            if self.multiscale and sources is not None:
+                eroded_c = self.create_multiscale_eroded_image(channel, sources, binary_mask)
+            else:
+                eroded_c = self.create_eroded_image(channel, binary_mask)
+
             reduced_c = (
                 (self.reduction_strength * gaussian_mask) * eroded_c
                 + (1.0 - self.reduction_strength * gaussian_mask) * channel
@@ -238,10 +316,10 @@ class StarEX:
             # =========================
             # REDUCED
             # =========================
-            reduced = self.reduce_stars_single_channel(luma, gaussian_mask, binary_mask)
+            reduced = self.reduce_stars_single_channel(luma, gaussian_mask, binary_mask, sources)
             return {"reduced": reduced}
 
-        reduced, eroded = self.reduce_stars_multi_channel(colored, gaussian_mask, binary_mask)
+        reduced, eroded = self.reduce_stars_multi_channel(colored, gaussian_mask, binary_mask, sources)
 
         if output_type == "eroded":
             return {"eroded": eroded}

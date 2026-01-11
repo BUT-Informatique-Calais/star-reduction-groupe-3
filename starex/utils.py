@@ -1,5 +1,3 @@
-import os
-
 # Third-party imports
 from astropy.io import fits
 from astropy.stats import sigma_clipped_stats
@@ -255,10 +253,12 @@ def save_combined_images(image1: str, image2: str, filepath: str) -> NDArray[np.
     Args:
         image1 (str): The first image to save
         image2 (str): The second image to save
+        filepath (str): The path to save the combined image
 
     Returns:
         ndarray: The combined image
     '''
+    # Loads images
     img1 = cv.imread(image1, cv.IMREAD_UNCHANGED)
     img2 = cv.imread(image2, cv.IMREAD_UNCHANGED)
 
@@ -271,6 +271,57 @@ def save_combined_images(image1: str, image2: str, filepath: str) -> NDArray[np.
     combined = np.hstack((img1, img2))
     cv.imwrite(filepath, combined)
     return combined
+
+def save_gif(image1: str, image2: str, filepath: str, duration: int=500):
+    '''Saves an animated GIF alternating between two images (blink comparison)
+
+    Args:
+        image1 (str): The first image to save
+        image2 (str): The second image to save
+        filepath (str): The path to save the GIF
+        duration (int): The duration per frame in milliseconds
+    '''
+    try:
+        from PIL import Image
+    except ImportError:
+        raise ImportError("Pillow is required to save a GIF. Install with `pip install Pillow`.")
+
+    # Loads images
+    img1 = cv.imread(image1, cv.IMREAD_UNCHANGED)
+    img2 = cv.imread(image2, cv.IMREAD_UNCHANGED)
+
+    # Ensures same shape
+    if img1.shape != img2.shape:
+        h = min(img1.shape[0], img2.shape[0])
+        w = min(img1.shape[1], img2.shape[1])
+        img1 = cv.resize(img1, (w, h))
+        img2 = cv.resize(img2, (w, h))
+    
+    # Converts BGR to RGB for PIL
+    if img1.ndim == 3:
+        img1_rgb = cv.cvtColor(img1, cv.COLOR_BGR2RGB)
+        img2_rgb = cv.cvtColor(img2, cv.COLOR_BGR2RGB)
+    else:
+        img1_rgb = img1
+        img2_rgb = img2
+
+    # Converts to PIL Images
+    # Handles 16-bit images by normalizing to 8-bit for GIF
+    if img1_rgb.dtype == np.uint16:
+        img1_rgb = (img1_rgb / 256).astype(np.uint8)
+        img2_rgb = (img2_rgb / 256).astype(np.uint8)
+
+    pil_img1 = Image.fromarray(img1_rgb)
+    pil_img2 = Image.fromarray(img2_rgb)
+
+    # Creates animated GIF
+    pil_img1.save(
+        filepath, 
+        save_all=True, 
+        append_images=[pil_img2], 
+        duration=duration, 
+        loop=0
+    )
 
 # =========================
 # KERNEL TOOLS
