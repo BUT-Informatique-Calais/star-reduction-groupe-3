@@ -20,8 +20,9 @@ OUTPUT_TYPES = Literal[
     "all"
 ]
 
+# TODO: Add unit tests?
 class StarEX:
-    '''StarEX : Star EXtraction (1.2.0)'''
+    '''StarEX : Star EXtraction (b1.2.1)'''
 
     def __init__(
         self, 
@@ -29,7 +30,7 @@ class StarEX:
         threshold_sigma=2.5, # Between 2.5 and 3.0
         r_min=2, 
         r_max=8, 
-        mask_blur_sigma=2.5, # Between 1.5 and 3.0
+        blur_strength=2.5, # Between 1.5 and 3.0
         reduction_strength=0.65, # Between 0.5 and 0.7 (1.0 is maximum reduction)
         kernel_radius=5, # Between 4 and 6
         iterations=1, 
@@ -43,18 +44,18 @@ class StarEX:
             threshold_sigma (float): Detection threshold (2.5-3.0)
             r_min (int): Minimum radius of mask
             r_max (int): Maximum radius of mask
-            mask_blur_sigma (float): Gaussian blur sigma (1.5-3.0)
+            blur_strength (float): Gaussian blur sigma (1.5-3.0)
             reduction_strength (float): Star reduction strength (0.5-0.8)
             kernel_radius (int): Morphological kernel radius (4-6)
             iterations (int): Number of morphological iterations
             starless_method (str): Method for starless image ("opening" or "inpainting")
-            multiscale (bool): Use multiscale eroded image
+            multiscale (bool): Use multiscale eroded image with adaptive kernel
         '''
         self.fwhm = fwhm
         self.threshold_sigma = threshold_sigma
         self.r_min = r_min
         self.r_max = r_max
-        self.mask_blur_sigma = mask_blur_sigma
+        self.blur_strength = blur_strength
         self.reduction_strength = reduction_strength
         self.kernel_radius = kernel_radius
         self.iterations = iterations
@@ -68,9 +69,16 @@ class StarEX:
         self: Self, 
         fits_data: NDArray[np.floating]
     ) -> Tuple[NDArray[np.floating], bool, NDArray[np.floating] | None]:
-        '''Extracts luminance from image data'''
+        '''Extracts luminance from image data
+
+        Args:
+            fits_data (ndarray): The FITS image
+
+        Returns:
+            ndarray: The luminance image
+        '''
         has_color = utils.has_color_channels(fits_data)
-        luma = utils.convert_to_luma(fits_data)
+        luma = utils.convert_to_luma(fits_data) # Super Mario Galaxy reference
         colored = fits_data.astype(np.float32) if has_color else None
         return luma, has_color, colored
 
@@ -78,7 +86,14 @@ class StarEX:
         self: Self, 
         luma: NDArray[np.floating]
     ) -> List:
-        '''Detects star sources in the luminance image'''
+        '''Detects star sources in the luminance image
+
+        Args:
+            luma (ndarray): The luminance image
+
+        Returns:
+            list: List of detected sources
+        '''
         sources, _, _ = utils.detect_stars_dao(
             luma, 
             fwhm=self.fwhm, 
@@ -91,7 +106,15 @@ class StarEX:
         shape: Tuple[int, int], 
         sources: List
     ) -> NDArray[np.uint8]:
-        '''Creates binary mask from detected sources'''
+        '''Creates binary mask from detected sources
+
+        Args:
+            shape (tuple): The shape of the mask
+            sources (list): The detected sources
+
+        Returns:
+            ndarray: The binary mask
+        '''
         mask = utils.build_binary_mask(
             shape, 
             sources, 
@@ -104,10 +127,17 @@ class StarEX:
         self: Self, 
         binary_mask: NDArray[np.uint8]
     ) -> NDArray[np.floating]:
-        '''Applies Gaussian blur to binary mask for smooth transitions'''
+        '''Applies Gaussian blur to binary mask for smooth transitions
+        
+        Args:
+            binary_mask (ndarray): The binary mask to blur
+
+        Returns:
+            ndarray: The blurred binary mask
+        '''
         gaussian_mask = utils.apply_gaussian_blur(
             binary_mask, 
-            sigma=self.mask_blur_sigma
+            sigma=self.blur_strength
         )
         return gaussian_mask
 
@@ -116,7 +146,15 @@ class StarEX:
         image: NDArray[np.floating], 
         binary_mask: Optional[NDArray[np.uint8]] = None
     ) -> NDArray[np.floating]:
-        '''Creates starless (eroded) version of image'''
+        '''Creates starless (eroded) version of image
+
+        Args:
+            image (ndarray): The luminance image
+            binary_mask (ndarray): The binary mask
+
+        Returns:
+            ndarray: The starless image
+        '''
         eroded = utils.get_starless_image(
             image, 
             mask=binary_mask, 
@@ -132,10 +170,21 @@ class StarEX:
         sources: List, 
         binary_mask: Optional[NDArray[np.uint8]] = None
     ) -> NDArray[np.floating]:
-        '''Creates starless (eroded) version of image using adaptative kernel sizes per star magnitude'''
+        '''Creates starless (eroded) version of image using adaptative kernel sizes per star magnitude
+
+        Args:
+            image (ndarray): The luminance image
+            sources (list): The detected sources
+            binary_mask (ndarray): The binary mask
+
+        Returns:
+            ndarray: The starless image
+        '''
+        # If no stars detected, return the original image
         if sources is None or len(sources) == 0:
             return image.copy()
 
+        # Get flux values
         flux = sources["flux"]
         f_min, f_max = flux.min(), flux.max()
 
@@ -184,7 +233,7 @@ class StarEX:
         medium_mask_norm = medium_mask.astype(np.float32) / 255.0
         large_mask_norm = large_mask.astype(np.float32) / 255.0
 
-        # Applies erosion
+        # Applies erosion formula
         result = result * (1.0 - large_mask_norm) + eroded_large * large_mask_norm
         result = result * (1.0 - medium_mask_norm) + eroded_medium * medium_mask_norm
         result = result * (1.0 - small_mask_norm) + eroded_small * small_mask_norm
@@ -198,12 +247,23 @@ class StarEX:
         binary_mask: Optional[NDArray[np.uint8]] = None, 
         sources: Optional[List] = None
     ) -> NDArray[np.floating]:
-        '''Reduces stars in a single channel'''
+        '''Reduces stars in a single channel
+
+        Args:
+            channel (ndarray): The channel to reduce
+            gaussian_mask (ndarray): The gaussian mask
+            binary_mask (ndarray): The binary mask
+            sources (list): The detected sources
+
+        Returns:
+            ndarray: The reduced image
+        '''
         if self.multiscale and sources is not None:
             eroded = self.create_multiscale_eroded_image(channel, sources, binary_mask)
         else:
             eroded = self.create_eroded_image(channel, binary_mask)
 
+        # Applies reduction formula
         reduced = (
             (self.reduction_strength * gaussian_mask) * eroded
             + (1.0 - self.reduction_strength * gaussian_mask) * channel
@@ -217,7 +277,17 @@ class StarEX:
         binary_mask: Optional[NDArray[np.uint8]] = None, 
         sources: Optional[List] = None
     ) -> Tuple[NDArray[np.floating], NDArray[np.floating]]:
-        '''Reduces stars in multi-channel (color) image'''
+        '''Reduces stars in multi-channel (color) image
+
+        Args:
+            colored (ndarray): The color image
+            gaussian_mask (ndarray): The gaussian mask
+            binary_mask (ndarray): The binary mask
+            sources (list): The detected sources
+
+        Returns:
+            ndarray: The reduced image
+        '''
         reduced_channels = []
         eroded_channels = []
 

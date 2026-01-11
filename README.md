@@ -1,4 +1,4 @@
-# 🌠 StarEX (1.2.0)
+# 🌠 StarEX (beta 1.2.1)
 
 ![Python](https://img.shields.io/badge/Python-3.8+-green)
 
@@ -8,17 +8,26 @@ To get started, refer to the following documentation: [Terminal Commands](docs/C
 
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/zP0O23M7)
 
-## Screenshots
+## Demo
 
-<img src="examples/images/test_M31_linear_original.png" alt="M31 Linear Original" width="300" height="300">
-<img src="examples/images/test_M31_linear_eroded.png" alt="M31 Linear Eroded" width="300" height="300">
-<img src="examples/images/test_M31_linear_binary_mask.png" alt="M31 Raw Mask" width="300" height="300">
+<img src="examples/images/HorseHead_blink.gif" alt="Horse Head blink" width="250" height="250">
+<img src="examples/images/test_M31_linear_blink.gif" alt="M31 linear blink" width="250" height="250">
+<img src="examples/images/test_M31_raw_binary_mask.png" alt="M31 raw binary mask" width="250" height="250">
 
 ## Authors
 
-- COLIN Noé [@Kiizer](https://www.github.com/Kiizer861)
 - MELOCCO David [@ThFoxY](https://www.github.com/ThFoxY)
 - LECLERCQ-SPETER Simon [@Koshy](https://www.github.com/KoshyMVP)
+- COLIN Noé [@Kiizer](https://www.github.com/Kiizer861)
+
+**For this project, we wanted to be professional:**
+* No unnecessary and poorly documented commits: before each push, the added/modified or deleted code was carefully analyzed. It took us a little time, but we were satisfied with the result!
+* Fair division between work parts: each of us did our part. Whether it was documentation, optimization, or adding features, we were able to develop a tool that is fulfilling, despite the tight deadlines. The last commits were made on @ThFoxY's account (there were three of us, then two 😓 until the end of the night) to facilitate the commits. Everyone participated until the last day!
+* Following the effective development course **(R3.02)**, we decided to explicitly type all (perhaps with a few mistakes, it's difficult you know?) our variables and write docstrings (it's true that auto-completion was our best friend!).
+* During the first few days (until Thursday), the use of AI was very limited: the goal was to encourage reading the documentation, developing a clean algorithm, and understanding the subject. Due to time constraints, translations were submitted to translators and some repetitive parts were generated. No piece of code was put in without knowing its purpose or meaning!
+* The English language is universal: it predominates in the scientific domain. We opted for accessible and open documentation!
+
+> **Summary:** it is pretty good for a tool made in a single week! Most professionnal project we ever done. Very interesting subject too!
 
 ## What's StarEX?
 
@@ -54,6 +63,8 @@ Here are the challenges we selected and the reasons why some were not chosen:
 
     * This is what makes StarEX lighweighted and easy-to-use! You can pass a single file, a list of file or even a directory that contains .FITS file and then apply specific process options.
     * The CLI comes with a progress bar and colors thanks to the **tqdm** and **Click** libraries.
+
+> This is a beta, because no tests were done and some bugs might still occurs!
 
 ## Installation
 

@@ -1,4 +1,4 @@
-This document is a report of our research over time.
+This document is a report of our research on this subject within the first days.
 
 It helps with understanding the subject matter, ensuring that each member has a point of reference and can quickly access definitions to speed up the development process.
 

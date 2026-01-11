@@ -15,21 +15,29 @@ Processes FITS images using the StarEX algorithm. It is its main feature and has
 python batch.py process [OPTIONS] PATHS...
 ```
 
-#### Arguments (mandatory)
+#### Arguments (required)
 - `PATHS` : A file, multiple files or a directory that contains FITS files
 
 #### Options (optional)
 
 | Option | Shortcut | Type | Defaults to | Description |
 |--------|-----------|------|--------|-------------|
-| `--output_type` | - | Choice | `reduced` | Image type to process |
+| `--output_type` | `-otype` | Choice | `reduced` | Image type to process |
 | `--outdir` | `-o` | Path | `results` | Output directory |
+| `--format` | - | Choice | `png16` | Output format: `png8` or `png16` |
+| `--starless-method` | - | Choice | `opening` | Starless method: `opening`(fast) or `inpainting`(better) |
 | `--fwhm` | `-f` | Float | `3.0` | Full Width at Half Maximum |
 | `--threshold_sigma` | `-t` | Float | `2.5` | Sigma threshold for star detection |
-| `--reduction_strength` | `-r` | Float | `0.5` | Star reduction strength (0-1) |
+| `--reduction_strength` | `-r` | Float | `0.65` | Star reduction strength (0-1) |
 | `--kernel_radius` | `-k` | Int | `4` | Morphological kernel radius |
 | `--iterations` | `-i` | Int | `1` | Number of morphological iterations |
-| `--open/--no-open` | - | Flag | `--open` | Open results after processing |
+| `--multiscale/--no-multiscale` | - | Flag | `False` | Use adaptive kernel sizes based on star magnitude |
+| `--tiling/--no-tiling` | - | Flag | `False` | Enable tiled processing |
+| `--tile-size` | - | Int | `128` | Tile size (pixels) |
+| `--tile-overlap` | - | Int | `64` | Tile overlap (pixels) |
+| `--workers` | - | Int | `CPU count` | Number of worker processes |
+| `--date/--no-date` | - | Flag | `False` | Add date to output filenames |
+| `--open/--no-open` | - | Flag | `False` | Open results after processing |
 
 #### Possible values for `--output_type`
 - `original` : original image
@@ -38,6 +46,7 @@ python batch.py process [OPTIONS] PATHS...
 - `eroded` : eroded image (called starless)
 - `reduced` : reduced image (stars are less bright)
 - `sources` : list of detected stars
+- `all` : generate all outputs above
 
 #### Examples
 ```bash
@@ -60,7 +69,25 @@ python batch.py process image1.fits image2.fits /dir/
 python batch.py process image.fits --no-open
 
 # Customized processing with advanced options
-python batch.py process image.fits -k 6 -i 2 --reduction_strength 0.9
+python batch.py process image.fits -k 6 -i 2 -r 0.9
+
+# Multiscale kernels
+python batch.py process image.fits --multiscale
+
+# Enable tiled processing with advanced options
+python batch.py process image.fits --tiling --tile-size 512 --tile-overlap 128
+
+# Force inpainting method for starless image
+python batch.py process image.fits --starless-method inpainting
+
+# Generate all output types
+python batch.py process image.fits --output_type all
+
+# Add date to filenames
+python batch.py process image.fits --date
+
+# Try everything!
+python batch.py process "../examples" -otype all --format png16 --starless-method inpainting -f 4.0 -t 3.0 -r 0.9 -k 6 -i 2 --multiscale --tiling --tile-size 128 --tile-overlap 64 --workers 4 --date --open -o test
 ```
 
 ---
@@ -74,7 +101,7 @@ Compare two resulting FITS image side-by-side in a single .png image.
 python batch.py compare [OPTIONS] FILE1 FILE2
 ```
 
-#### Arguments (mandatory)
+#### Arguments (required)
 - `FILE1` : First image to compare
 - `FILE2` : Second image to compare
 
@@ -83,7 +110,10 @@ python batch.py compare [OPTIONS] FILE1 FILE2
 | Option | Shortcut | Type | Defaults to | Description |
 |--------|-----------|------|--------|-------------|
 | `--outdir` | `-o` | Path | `results/comparison` | Output directory for comparisons |
-| `--open/--no-open` | - | Flag | `--open` | Open comparison directory after processing |
+| `--blink` | `-b` | Flag | `False` | Generate animated GIF |
+| `--blink-duration` | - | Int | `500` | Frame duration (ms) |
+| `--date/--no-date` | - | Flag | `False` | Add date to output filenames |
+| `--open/--no-open` | - | Flag | `False` | Open comparison directory after processing |
 
 #### Examples
 ```bash
@@ -93,22 +123,28 @@ python batch.py compare original_image.png reduced_image.png
 # Compare two processed FITS images and save result in a specified directory
 python batch.py compare img1.png img2.png -o comparaisons/
 
-# Compare to processed FITS images without opening result .png
+# Compare to processed FITS images without opening resulting .png
 python batch.py compare img1.png img2.png --no-open
+
+# Generate animated GIF for blinking comparison
+python batch.py compare img1.png img2.png -b
+
+# Faster blink duration
+python batch.py compare img1.png img2.png --blink --blink-duration 200
 ```
 
 ---
 
 ### 3. `view` - View FITS header information
 
-View in a formatted table a FITS file header.
+View in a formatted table a FITS file header. Experimental!
 
 #### Syntax
 ```bash
 python batch.py view FILENAME
 ```
 
-#### Arguments
+#### Arguments (required)
 - `FILENAME` : FITS file to view header from
 
 #### Examples
@@ -142,5 +178,8 @@ python batch.py view --help
 ## Notes
 
 - FITS file available formats: `.fits`, `.fit`, `.fts`
-- Results are saved into .png images
+- Output images are PNG (`png8`or `png16`)
+- Batch processing supported (multiple files at once)
+- Tiled processing for large images only
+- Multicore support via --workers
 - Cool progress bar when processing!
