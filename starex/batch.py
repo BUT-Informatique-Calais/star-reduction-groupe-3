@@ -8,14 +8,12 @@ from tqdm import tqdm # Progress bar
 import click # Command line interface
 
 # Typing
-from typing import List
+from typing import List, Dict
 
 # Local imports
 from algorithm import StarEX # Algorithm
-import utils # Utilities
+import utils
 
-# TODO: Add explicit types because I'm lazy to do it
-# TODO: Give better explanations for parameters
 def collect_files(paths: List[str]) -> List[str]:
     '''Collects all FITS files from given paths (files or directories)
 
@@ -35,7 +33,7 @@ def collect_files(paths: List[str]) -> List[str]:
             # Iterates through all FITS files in directory using a list comprehension
             fits_files = [
                 # Checks for each file if it's a FITS file
-                [str(f) for f in path_obj.iterdir() if utils.is_file_fits_format(str(f))]
+                str(f) for f in path_obj.iterdir() if utils.is_file_fits_format(str(f))
             ]
             files.extend(fits_files) # Adds FITS files to list
 
@@ -90,7 +88,7 @@ def open_file_or_directory(path: str) -> bool:
 # Then, it gets associated with the function.
 # =============================================
 @click.group() # Command group
-@click.version_option(version="0.0.1", prog_name="StarEX") # Version
+@click.version_option(version="1.2.0", prog_name="StarEX") # Version
 def batch():
     '''StarEX - Lightweight Star Extraction & Removal Tool for FITS images'''
     pass
@@ -113,46 +111,73 @@ def batch():
                     "all"
                 ]), default="reduced", 
                 help="Type of image to output. Defaults to 'reduced'")
+
 # Outdir (for Output Directory): directory to save results into
 @click.option("-o", "--outdir", "outdir", 
                 type=click.Path(), 
                 default="results", 
                 help="Directory to save results into")
+
+# Format: output image format
+@click.option("--format", "format_type", 
+                type=click.Choice(["png8", "png16"]), # Removed "tiff" because it wont work :c
+                default="png16", 
+                help="Output format: png8 (8-bit PNG), png16 (16-bit PNG), tiff32 (32-bit TIFF). Defaults to png16")
+
+# Normalize: normalize output image for TIFF files
+@click.option("--no-norm", "no_normalize", 
+                is_flag=True, 
+                default=False, 
+                help="Disable normalization for TIFF32 (raw float data). Only applies to tiff32 format! Defaults to False")
+
+# Starless method: opening (fast) or inpainting (better quality)
+@click.option("--starless-method", "starless_method", 
+                type=click.Choice(["opening", "inpainting"]), 
+                default="opening", 
+                help="Method for starless image: opening (fast) or inpainting (better quality). Defaults to opening")
+
 # FWHM (for Full Width at Half Maximum): the apparent size of a star
 @click.option("-f", "--fwhm", "full_width_half_max", 
                 type=float, 
                 default=3.0, 
                 help="Full width at half maximum: the apparent size of a star. Defaults to 3.0")
+
 # Threshold sigma: to which threshold a star gets detected as a star
 @click.option("-t", "--threshold_sigma", "threshold_sigma", 
                 type=float, 
                 default=2.5, 
                 help="Threshold sigma value to use for star detection. The higher the value, the less stars will be detected. Defaults to 2.5")
+
 # Reduction strength: the higher the value, the less stars will be visible
 @click.option("-r", "--reduction_strength", "reduction_strength", 
                 type=float, 
-                default=0.5, 
-                help="Star reduction strength. The value is between 0 and 1. Defaults to 0.5")
+                default=0.65, 
+                help="Star reduction strength. The value is between 0 and 1. Defaults to 0.65")
+
 # Kernel radius: morphological kernel radius
 @click.option("-k", "--kernel_radius", "kernel_radius", 
                 type=int, 
                 default=4, 
                 help="Morphologicial kernel radius. Uses a circular kernel of a given radius. Defaults to 4")
+
 # Iterations: number of morphological iterations
 @click.option("-i", "--iterations", "iterations", 
                 type=int, 
                 default=1, 
                 help="Number of morphological iterations: how many times morphological operations are applied. Defaults to 1")
+
 # Date: add date to output filename to avoid overwriting
 @click.option("--date/--no-date", 
                 default=True, 
                 help="Add date to output filename. Defaults to True")
+
 # Open: open the resulting image (or directory if multiple files) or not
 @click.option("--open/--no-open", 
               default=True, 
               help="Open the resulting image (or directory if multiple files) after processing. Defaults to True")
+
 # Main function: processes FITS files
-def process(paths, output_type, outdir, full_width_half_max, threshold_sigma, reduction_strength, kernel_radius, iterations, date, open):
+def process(paths, output_type, outdir, format_type, no_normalize, starless_method, full_width_half_max, threshold_sigma, reduction_strength, kernel_radius, iterations, date, open):
     '''Processes FITS images using StarEX algorithm'''
 
     # Collects all FITS files from given paths (files or directories)
@@ -168,14 +193,22 @@ def process(paths, output_type, outdir, full_width_half_max, threshold_sigma, re
         f"[OK] Found {len(files)} FITS files.", fg="green", bold=True
     )
 
+    # Maps format type to its file extension
+    format_ext_map: Dict[str, str] = {
+        "png8": ".png", 
+        "png16": ".png", 
+        "tiff": ".tiff"
+    }
+    file_ext = format_ext_map[format_type]
+
     # Initializes algorithm
     algorithm = StarEX(
-        fwhm=full_width_half_max,
-        threshold_sigma=threshold_sigma,
-        reduction_strength=reduction_strength,
-        kernel_radius=kernel_radius,
-        iterations=iterations
-        # TODO: Add more options
+        fwhm=full_width_half_max, 
+        threshold_sigma=threshold_sigma, 
+        reduction_strength=reduction_strength, 
+        kernel_radius=kernel_radius, 
+        iterations=iterations, 
+        starless_method=starless_method
     )
 
     # Defines the types to be processed
@@ -222,7 +255,7 @@ def process(paths, output_type, outdir, full_width_half_max, threshold_sigma, re
                     # Counts the number of sources
                     nb_sources = len(result['sources']) if result['sources'] is not None else 0
                     click.secho(
-                        f"\n{filename}: {nb_sources} stars detected!", fg="yellow", bold=True
+                        f"\n[OK] {filename}: {nb_sources} stars detected!", fg="yellow", bold=True
                         )
                     click.secho(
                         "------------------------------------------------------------------------------------------------------------------", fg="blue", bold=True
@@ -230,19 +263,30 @@ def process(paths, output_type, outdir, full_width_half_max, threshold_sigma, re
                 else:
                     # Saves image output
                     output_data = result[current_type]
+
                     if date:
-                        save_path = output_dir / f"{filename}_{current_type}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
+                        save_path = output_dir / f"{filename}_{current_type}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}{file_ext}"
                     else:
-                        save_path = output_dir / f"{filename}_{current_type}.png"
-                    utils.save_float_image(output_data, str(save_path))
+                        save_path = output_dir / f"{filename}_{current_type}{file_ext}"
+
+                    # Applies normalization if tiff32
+                    normalize_tiff = not no_normalize if format_type == "tiff" else True
+
+                    utils.save_float_image(
+                        output_data, 
+                        str(save_path), 
+                        raw=False, 
+                        format_type=format_type, 
+                        normalize_tiff=normalize_tiff
+                    )
 
                     click.secho(
-                        f"[OK] Results saved to: {output_dir.absolute()}", fg="green", bold=True
+                        f"\n[OK] Results saved to: {output_dir.absolute()}", fg="green", bold=True
                     )
                     click.secho(
                         "------------------------------------------------------------------------------------------------------------------", fg="blue", bold=True
                     )
-                processed_files.append(save_path) # Adds processed file to list
+                    processed_files.append(save_path) # Adds processed file to list
 
     # Open results if requested
     if open and output_type != "sources":
@@ -278,19 +322,23 @@ def process(paths, output_type, outdir, full_width_half_max, threshold_sigma, re
 # Requires two file paths
 @click.argument("file1", type=click.Path(exists=True))
 @click.argument("file2", type=click.Path(exists=True))
+
 # Outdir (for Output Directory): directory to save results into
 @click.option("-o", "--outdir", "outdir", 
                 type=click.Path(), 
                 default="results/comparison", 
                 help="Directory to save comparison into")
+
 # Date: add date to output filename to avoid overwriting
 @click.option("--date", "date", 
                 default=True, 
                 help="Add date to output filename. Defaults to True")
+
 # Open: open the resulting image (or directory if multiple files) or not
 @click.option("--open/--no-open",
               default=True,
               help="Open the resulting image after comparison. Defaults to True")
+
 def compare(file1, file2, outdir, date, open):
     '''Compares two FITS images side-by-side'''
 
@@ -299,7 +347,7 @@ def compare(file1, file2, outdir, date, open):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Counts existing comparison (has .png extension)
-    nb_files = len(list(output_dir.glob("*.png")))
+    nb_files = len(list(output_dir.glob("*.png"))) + len(list(output_dir.glob("*.tiff")))
     if date:
         output_path = output_dir / f"comparison_{nb_files + 1}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
     else:

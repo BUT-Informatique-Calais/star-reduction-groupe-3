@@ -1,4 +1,4 @@
-# 🌠 StarEX (0.0.1)
+# 🌠 StarEX (1.2.0)
 
 ![Python](https://img.shields.io/badge/Python-3.8+-green)
 

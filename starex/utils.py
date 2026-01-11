@@ -1,43 +1,23 @@
+import os
+
+# Third-party imports
 from astropy.io import fits
 from astropy.stats import sigma_clipped_stats
+
+# Third-party imports
 from photutils.detection import DAOStarFinder
-import matplotlib.pyplot as plt
+from pathlib import Path # For compatibility: it avoids struggle between Windows and UNIX paths (https://docs.python.org/3/library/pathlib.html)
+from tabulate import tabulate
 import cv2 as cv
 import numpy as np
+
+# Typing
 from numpy.typing import NDArray
-import os
-from tabulate import tabulate
-from typing import Tuple, Optional
-# TODO: Sorts out imports
+from typing import Tuple, Optional, Literal
 
-
-# TODO: Add Optional types
-# TODO: There is a lot of unused functions or incompatible functions. Needs to be sorted out!!
 # =========================
 # FILESYSTEM UTILITIES
 # =========================
-def does_file_exist(filepath: str) -> bool:
-    '''Checks whether a file exists
-
-    Args:
-        filepath (str): The path to the file
-
-    Returns:
-        bool: True if the file exists
-    '''
-    return os.path.isfile(filepath)
-
-def does_dir_exist(dirpath: str) -> bool:
-    '''Checks whether a directory exists
-
-    Args:
-        dirpath (str): The path to the directory
-
-    Returns:
-        bool: True if the directory exists
-    '''
-    return os.path.isdir(dirpath)
-
 def is_file_fits_format(filepath: str) -> bool:
     '''Checks if a file is in FITS format
 
@@ -52,34 +32,38 @@ def is_file_fits_format(filepath: str) -> bool:
 # =========================
 # FITS UTILITIES
 # =========================
-def get_hdu_list(filepath: str) -> fits.HDUList:
+def get_hdu_list(filepath: str, memmap: bool=False) -> fits.HDUList:
     '''Gets an HDUList from a FITS file.
 
     Args:
         filepath (str): The path to the FITS file
+        memmap (bool, optional): If True, the HDUList will be memory-mapped. Avoids loading the entire FITS file into RAM (for bigger files). Defaults to False. 
 
     Returns:
         fits.HDUList: Opened HDU list.
     '''
-    if not does_file_exist(filepath):
+    path_obj = Path(filepath) # Convert to Path object for compatibility
+    if not path_obj.is_file():
         raise Exception("File not found.")
+
     if not is_file_fits_format(filepath):
         raise Exception("Invalid file format. Please provide a FITS file.")
 
-    hdul = fits.open(filepath)
+    hdul = fits.open(filepath, memmap=memmap)
     return hdul
 
-def get_hdu_data(hdul: fits.HDUList, index: int=0) -> NDArray[np.floating]:
+def get_hdu_data(hdul: fits.HDUList, index: int=0, astype: str="float32") -> NDArray[np.floating]:
     '''Gets the data from an HDUList
 
     Args:
         hdul (fits.HDUList): Opened HDU list.
         index (int, optional): Index of the HDU. Defaults to 0.
+        astype (str, optional): The data type to convert to. Defaults to "float32".
 
     Returns:
         ndarray: Data from the HDU
     '''
-    return hdul[index].data
+    return hdul[index].data.astype(getattr(np, astype))
 
 def get_hdu_header(hdul: fits.HDUList, index: int=0) -> fits.Header:
     '''Gets the header from an HDUList
@@ -118,62 +102,152 @@ def has_color_channels(data: NDArray[np.floating]) -> bool:
     '''
     return data.ndim == 3
 
+def read_fits(filepath: str, index: int=0, apply_bscale: bool = True):
+    '''Reads a FITS file and returns the data and header
+
+    Args:
+        filepath (str): The path to the FITS file
+        index (int, optional): Index of the HDU. Defaults to 0.
+        apply_bscale (bool, optional): If True, applies BSCALE and BZERO correction to the data. Defaults to True.
+
+    Returns:
+        tuple: A tuple containing the data and header
+    '''
+    hdul = get_hdu_list(filepath, memmap=True) # memmap for faster reading: avoids loading the entire FITS file into RAM (for bigger files)
+    header = get_hdu_header(hdul, index) # Gets the header of the first HDU (metadata: exposure time, date, etc.)
+    data = get_hdu_data(hdul, index, "float32") # Gets the data of the first HDU (float32: standard precision for FITS files)
+    hdul.close() # Frees up memory
+
+    # Applies BSCALE and BZERO correction if requested
+    if apply_bscale:
+       bscale = header.get("BSCALE", 1.0) # Retrieves the scaling factor. Defaults to 1.0
+       bzero = header.get("BZERO", 0.0) # Retrieves the calibration offset. Defaults to 0.0
+       data = data * bscale + bzero # Applies the formula: real value = raw value * scaling factor + calibration offset
+
+    # In a tuple: (data, header)
+    return data, header
+
 # =========================
 # IMAGE NORMALIZATION/SAVING
 # =========================
-def normalize_minmax(data: NDArray[np.floating], eps: float=1e-8) -> NDArray[np.float32]:
-    '''Normalize image data to the [0, 1] range using min-max scaling.
+def simple_normalize(data: NDArray[np.floating]) -> NDArray[np.floating]:
+    '''Simplified normalization: min-max normalization (no clipping, no percentile)'''
+    data = data.astype(np.float32)
+
+    # Replaces NaN/Inf by 0 (to avoid invalid pixels)
+    data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+
+    # Min-max based normalization
+    data_min = data.min()
+    data_max = data.max()
+
+    if data_max - data_min < 1e-10:
+        return np.zeros_like(data)
+
+    normalized = (data - data_min) / (data_max - data_min)
+    return normalized
+
+def convert_fits_to_png(
+    data: NDArray[np.floating], 
+    bitdepth: int = 16
+) -> NDArray:
+    '''Converts a FITS image to a PNG image
 
     Args:
-        data (ndarray): The image to normalize
-        eps (float, optional): A small number to avoid division by zero. Defaults to 1e-8.
+        data (ndarray): The FITS image
+        bitdepth (int, optional): The bitdepth of the PNG image. Defaults to 16.
 
     Returns:
-        ndarray: The normalized image
+        ndarray: The PNG image
     '''
-    min_val = np.min(data)
-    max_val = np.max(data)
-
-    if max_val - min_val < eps:
-        return np.zeros_like(data, dtype=np.float32)
-
-    return (data - min_val) / (max_val - min_val)
-
-def save_preview_image(data: NDArray[np.floating], filepath: str) -> None:
-    '''Saves an image preview using Matplotlib
-
-    Args:
-        data (ndarray): The image to save
-        filepath (str): The path to save the image
-    '''
-    if data.ndim == 3:
-        plt.imsave(filepath, normalize_minmax(data))
+    # Converts C, H, W to H, W, C
+    if data.ndim == 3 and data.shape[0] == 3:
+        arr = np.transpose(data, (1, 2, 0)).astype(np.float32)
     else:
-        plt.imsave(filepath, data, cmap='gray')
+        arr = data.astype(np.float32) if data.ndim == 2 else data
 
-def save_float_image(data: NDArray[np.floating], filepath: str) -> None:
-    '''Save a floating-point image as an 8-bit PNG using OpenCV
-
-    Args:
-        data (ndarray): The image to save (H, W) or (H, W, C) or (C, H, W)
-        filepath (str): The path to save the image
-    '''
-    # Ensure (H, W, C) format for color images
-    if data.ndim == 3:
-        if data.shape[0] == 3:
-            # Convert (C, H, W) -> (H, W, C)
-            data = np.transpose(data, (1, 2, 0))
-
-        # Normalize each channel separately
-        img = np.zeros_like(data, dtype=np.uint8)
-        for c in range(3):
-            img[..., c] = (normalize_minmax(data[..., c]) * 255).astype(np.uint8)
-        # Convert RGB to BGR for OpenCV
-        img = cv.cvtColor(img, cv.COLOR_RGB2BGR)
-        cv.imwrite(filepath, img)
-    else:
+    # Simple normalization per channel
+    if arr.ndim == 2:
         # Monochrome
-        cv.imwrite(filepath, (normalize_minmax(data) * 255).astype(np.uint8))
+        normalized = simple_normalize(arr)
+    else:
+        # Colors: processes each channel separately
+        normalized = np.zeros_like(arr, dtype=np.float32)
+        for c in range(arr.shape[2]):
+            normalized[..., c] = simple_normalize(arr[..., c])
+
+    # Converts to 8 or 16 bits
+    scaled = normalized * (2 ** bitdepth - 1)
+    img = scaled.astype(np.uint16 if bitdepth == 16 else np.uint8)
+
+    # RGB to BGR for OpenCV
+    if img.ndim == 3:
+        img = cv.cvtColor(img, cv.COLOR_RGB2BGR)
+    
+    return img
+
+def save_display_image(display_img: NDArray, filepath: str):
+    '''Save a display-ready image as a PNG file
+
+    Args:
+        display_img (ndarray): The image to save (H, W, C) or (C, H, W)
+        filepath (str): The path to save the image
+    '''
+    cv.imwrite(filepath, display_img)
+
+# TODO: Make... it... work... :c
+def save_tiff_float(
+    data: NDArray[np.floating], 
+    filepath: str, 
+    normalize: bool = True
+):
+    '''Save float data as TIFF 32-bit (with or without normalization)'''
+    # Normalizes data shape to H, W, C
+    if data.ndim == 3 and data.shape[0] == 3:
+         arr = np.transpose(data, (1, 2, 0)).astype(np.float32)
+    else:
+        arr = data if data.ndim == 2 else data.astype(np.float32)
+
+    if normalize:
+        # Applies asinh and then normalize to [0, 1]
+        if arr.ndim == 2:
+            normalized = simple_normalize(arr)
+        else:
+            normalized = np.zeros_like(arr, dtype=np.float32)
+            for c in range(arr.shape[2]):
+                normalized[..., c] = simple_normalize(arr[..., c])
+            # RGB to BGR for OpenCV
+            if normalized.ndim == 3:
+                normalized = normalized[..., ::-1]
+
+        cv.imwrite(filepath, normalized.astype(np.float32))
+    else:
+        # Saves raw data
+        if arr.ndim == 3:
+            arr = arr[..., ::-1]
+        cv.imwrite(filepath, arr.astype(np.float32))
+
+def save_float_image(
+    data: NDArray[np.floating], 
+    filepath: str, 
+    raw: bool = False, 
+    format_type: Literal["png8", "png16", "tiff"] = "png16", 
+    normalize_tiff: bool = True
+):
+    '''Save a float image in various formats'''
+    if raw:
+        fits.writeto(filepath.replace(".png", ".fits").replace(".tiff", ".fits").replace(".tif", ".fits"), data, overwrite=True)
+        return
+
+    if format_type == "tiff":
+        tiff_path = filepath.replace(".png", ".tiff")
+        save_tiff_float(data, tiff_path, normalize=normalize_tiff)
+    elif format_type == "png8":
+        img = convert_fits_to_png(data, bitdepth=8)
+        save_display_image(img, filepath)
+    else:  # png16
+        img = convert_fits_to_png(data, bitdepth=16)
+        save_display_image(img, filepath)
 
 def save_combined_images(image1: str, image2: str, filepath: str) -> NDArray[np.uint8]:
     '''Save two images side by side for comparison
@@ -185,9 +259,16 @@ def save_combined_images(image1: str, image2: str, filepath: str) -> NDArray[np.
     Returns:
         ndarray: The combined image
     '''
-    image1 = cv.imread(image1)
-    image2 = cv.imread(image2)
-    combined = np.hstack((image1, image2))
+    img1 = cv.imread(image1, cv.IMREAD_UNCHANGED)
+    img2 = cv.imread(image2, cv.IMREAD_UNCHANGED)
+
+    # Ensures same shape
+    if img1.shape[0] != img2.shape[0]:
+        h = min(img1.shape[0], img2.shape[0])
+        img1 = cv.resize(img1, (int(img1.shape[1] * h / img1.shape[0]), h))
+        img2 = cv.resize(img2, (int(img2.shape[1] * h / img2.shape[0]), h))
+
+    combined = np.hstack((img1, img2))
     cv.imwrite(filepath, combined)
     return combined
 
@@ -205,7 +286,7 @@ def create_square_kernel(size: int) -> NDArray[np.uint8]:
     '''
     return np.ones((size, size), np.uint8)
 
-def create_circular_kernel(radius):
+def create_circular_kernel(radius) -> NDArray[np.uint8]:
     '''Creates a circular kernel of a given radius
 
     Args:
@@ -215,35 +296,9 @@ def create_circular_kernel(radius):
         ndarray: The kernel
     '''
     size = 2 * radius + 1
-    y, x = np.ogrid[-radius:radius+1, -radius:radius+1]
-    mask = x*x + y*y <= radius*radius
+    y, x = np.ogrid[-radius:radius + 1, -radius:radius + 1]
+    mask = x * x + y * y <= radius * radius
     return mask.astype(np.uint8)
-
-def fits_to_uint8_image(data: NDArray[np.floating]) -> NDArray[np.uint8]:
-    '''Converts a FITS image to a uint8 OpenCV image
-
-    Args:
-        data (ndarray): The FITS image to convert
-
-    Returns:
-        ndarray: The converted image
-    '''
-    # Transposes to (height, width, channels)
-    if data.ndim == 3 and data.shape[0] == 3:
-        data = np.transpose(data, (1, 2, 0))
-
-    # Has channels
-    if data.ndim == 3:
-        img = np.zeros_like(data, dtype=np.uint8)
-
-        # For every channel
-        for c in range(3):
-            img[..., c] = (normalize_minmax(data[..., c]) * 255).astype(np.uint8)
-        # Converts to BGR
-        return cv.cvtColor(img, cv.COLOR_RGB2BGR)
-    else:
-        # Monochrome
-        return (normalize_minmax(data) * 255).astype(np.uint8)
 
 # =========================
 # MASK UTILITIES
@@ -274,7 +329,7 @@ def dilate_mask(mask: NDArray[np.uint8], kernel: NDArray[np.uint8], iterations: 
     '''
     return cv.dilate(mask, kernel, iterations=iterations)
 
-def convert2luma(image: NDArray[np.floating]) -> NDArray[np.floating]:
+def convert_to_luma(image: NDArray[np.floating]) -> NDArray[np.floating]:
     '''Converts an image to luma
 
     Args:
@@ -293,7 +348,7 @@ def convert2luma(image: NDArray[np.floating]) -> NDArray[np.floating]:
         elif image.shape[2] == 3:
             return np.mean(image, axis=2).astype(np.float32)
         else:
-            # fallback: mean over last axis
+            # Fallback: mean over last axis
             return np.mean(image, axis=-1).astype(np.float32)
     else:
         raise ValueError(f"Unsupported image shape {image.shape}")
@@ -361,10 +416,9 @@ def build_binary_mask(
         radius = int(r_min + (r_max - r_min) * np.sqrt(f_norm))
 
         cv.circle(mask, (x, y), radius, 255, -1)
-
     return mask
 
-def apply_gaussian_blur(mask: NDArray[np.uint8], sigma: float=2.0):
+def apply_gaussian_blur(mask: NDArray[np.uint8], sigma: float=2.0) -> NDArray[np.floating]:
     '''Applies a Gaussian blur to a mask
 
     Args:
@@ -377,7 +431,7 @@ def apply_gaussian_blur(mask: NDArray[np.uint8], sigma: float=2.0):
     mask_f = mask.astype(np.float32) / 255.0
     return cv.GaussianBlur(mask_f, ksize=(0, 0), sigmaX=sigma)
 
-def get_starless_image(image: NDArray[np.floating], kernel_radius: int=4, iterations: int=1) -> NDArray[np.floating]:
+def get_starless_image_with_opening(image: NDArray[np.floating], kernel_radius: int=4, iterations: int=1) -> NDArray[np.floating]:
     '''Gets a starless image by using morphological opening. Morphological opening is a combination of erosion and dilation
 
     Args:
@@ -391,14 +445,35 @@ def get_starless_image(image: NDArray[np.floating], kernel_radius: int=4, iterat
     kernel = create_circular_kernel(kernel_radius)
     return cv.morphologyEx(image, cv.MORPH_OPEN, kernel, iterations=iterations)
 
+def get_starless_image_inpainting(image: NDArray[np.floating], mask: NDArray[np.uint8], method: str="telea") -> NDArray[np.floating]:
+    '''Gets a starless image by using inpainting (way better!)'''
+    # Normalizes data to uint8 for cv.inpaint
+    img_norm = ((image - image.min()) / (image.max() - image.min() + 1e-8) * 255).astype(np.uint8)
+
+    inpaint_method = cv.INPAINT_TELEA if method == "telea" else cv.INPAINT_NS
+    inpainted = cv.inpaint(img_norm, mask, inpaintRadius=3, flags=inpaint_method)
+
+    # Reconverts to float32 with original scale
+    result = inpainted.astype(np.float32) / 255.0 * (image.max() - image.min()) + image.min()
+    return result
+
+def get_starless_image(
+    image: NDArray[np.floating], 
+    mask: Optional[NDArray[np.uint8]] = None, 
+    kernel_radius: int=4, 
+    iterations: int=1, 
+    method: Literal["opening", "inpainting"] = "opening"
+) -> NDArray[np.floating]:
+    '''Gets a starless image using chosen method'''
+    if method == "inpainting":
+        if mask is None:
+            raise ValueError("Inpainting requires a binary mask")
+        return get_starless_image_inpainting(image, mask, method="telea")
+    else:
+        return get_starless_image_with_opening(image, kernel_radius, iterations)
+
 # =========================
 # TESTING PLAYGROUND YAY!
 # =========================
 if __name__ == "__main__":
-    filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.path.pardir, "examples/test_M31_linear.fits")
-    hdul = get_hdu_list(filepath)
-    fits_data = get_hdu_data(hdul)
-    hdul.close()
-
-    fits_header = create_fits_header_table(hdul, 0)
-    print(fits_header)
+    pass
